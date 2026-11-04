@@ -1,0 +1,18 @@
+services:
+  lifehub:
+    build: .
+    container_name: lifehub
+    restart: unless-stopped
+    ports:
+      # Change the left number to use a different port on your machine.
+      # To keep it private to this computer only, use "127.0.0.1:8000:8000".
+      - "8000:8000"
+    environment:
+      TZ: America/Chicago   # affects what "today" means in apps
+      DATA_DIR: /data
+    volumes:
+      - ./data:/data        # your database lives here — back this folder up
+      # Dev mode: uncomment these two lines and the command below to hot-reload
+      # - ./core:/app/core
+      # - ./apps:/app/apps
+    # command: uvicorn core.main:app --host 0.0.0.0 --port 8000 --reload
