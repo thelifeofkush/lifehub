@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}LifeHub{% endblock %}</title><link rel="stylesheet" href="/static/style.css"></head>
+<body><aside><a class="brand" href="/">◈ LifeHub</a><p class="muted">A little more intentional.</p><nav><a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>⌂ Overview</a>{% for app in apps %}<a href="/{{ app.slug }}/" {% if request.url.path.startswith('/' ~ app.slug ~ '/') %}aria-current="page"{% endif %}>{{ app.icon }} {{ app.name }}</a>{% endfor %}</nav><small>Your life. Your data.<br>Stored on your server.</small></aside><main><header><span>YOUR PERSONAL SPACE</span><time>{{ today }}</time></header>{% block content %}{% endblock %}</main></body>
+</html>

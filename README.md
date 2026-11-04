@@ -5,7 +5,7 @@ dashboard; every folder you drop into `apps/` becomes a new tracker automaticall
 
 - **Stack:** Python · FastAPI · Jinja2 · SQLite (no JS build step, no external services)
 - **Data:** one SQLite file at `./data/lifehub.db` (mounted volume — back it up)
-- **Included apps:** Habits, Journal, Expenses
+- **Included apps:** Habits, Journal, Expenses, and a Duncan planner launcher
 
 ## Run it
 
@@ -15,9 +15,16 @@ docker compose up -d --build
 
 Open <http://localhost:8000>. Stop with `docker compose down` (data is kept in `./data`).
 
+Install and start Docker Desktop first (Linux containers). The default port is
+bound to `127.0.0.1`, so only this computer can access it. For a home server,
+change the mapping to `"8000:8000"` to allow your LAN to connect.
+
+Duncan opens your existing hosted planner in a new tab. It does not sync or
+migrate planner data into the local database. The other three apps store data locally.
+
 > **Security:** there is no login. Keep it on your own machine/network. To make it
-> reachable only from the computer it runs on, change the port mapping in
-> `docker-compose.yml` to `"127.0.0.1:8000:8000"`. If you expose it beyond your LAN,
+> reachable only from the computer it runs on, keep the default port mapping in
+> `docker-compose.yml` as `"127.0.0.1:8000:8000"`. If you expose it beyond your LAN,
 > put it behind a reverse proxy with authentication (e.g. Caddy/Traefik + basic auth,
 > Tailscale, or Cloudflare Access).
 
@@ -37,6 +44,17 @@ Then in `apps/sleep/`:
 3. Rebuild: `docker compose up -d --build` (or use dev mode below).
 
 That's it — no registration step. The app appears in the nav and home page.
+
+Use lowercase folder names starting with a letter, followed by letters, digits,
+or underscores. Folders beginning with `_` are ignored. Treat app folders as
+trusted server code: every app can access the shared database.
+
+PowerShell equivalent:
+
+```powershell
+Copy-Item apps/_template apps/sleep -Recurse
+Rename-Item apps/sleep/templates/_template sleep
+```
 
 ### The app contract
 
@@ -64,6 +82,21 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn core.main:app --reload
 ```
+
+On Windows, activate with `.venv\Scripts\Activate.ps1` instead of `source`.
+For tests, install `requirements-dev.txt` and run
+`python -m unittest discover -s tests -v`.
+
+### Backups and hosting
+
+Stop the container before copying `data/lifehub.db` for a consistent backup.
+Restore by stopping LifeHub, replacing that file, and starting it again.
+Never commit the database or personal data to GitHub.
+
+This repository targets Docker on your computer, a home server, or a VPS.
+It needs a persistent writable `./data` volume. A static website host cannot
+run this Python/SQLite application. For internet hosting, configure an
+authenticated HTTPS reverse proxy before exposing it.
 
 ## Project layout
 

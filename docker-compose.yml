@@ -6,7 +6,7 @@ services:
     ports:
       # Change the left number to use a different port on your machine.
       # To keep it private to this computer only, use "127.0.0.1:8000:8000".
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       TZ: America/Chicago   # affects what "today" means in apps
       DATA_DIR: /data
