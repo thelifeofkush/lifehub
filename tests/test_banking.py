@@ -154,7 +154,10 @@ class BankTests(unittest.TestCase):
             client.auth = ('owner', 'test-password')
             self.assertEqual(client.post('/expenses/bank/link', json={}).status_code, 403)
             headers = {'X-LifeHub': '1'}
-            self.assertEqual(client.post('/expenses/bank/link', json={}, headers={**headers, 'Origin': 'https://evil.test'}).status_code, 403)
+            rejected = client.post('/expenses/bank/link', json={}, headers={**headers, 'Origin': 'https://evil.test'})
+            self.assertEqual(rejected.status_code, 403)
+            self.assertEqual(rejected.json()['money_url'], 'http://testserver/expenses/')
+            self.assertIn('configured HTTPS address', rejected.json()['error'])
             with patch.object(banking, 'create_link_token', return_value='link-test'):
                 self.assertEqual(client.post('/expenses/bank/link', json={}, headers=headers).status_code, 200)
             self.assertEqual(client.post('/expenses/bank/resume', json={}, headers=headers).json()['link_token'], 'link-test')

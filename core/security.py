@@ -6,7 +6,7 @@ import secrets
 from core.db import db
 
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import PlainTextResponse
+from starlette.responses import PlainTextResponse, JSONResponse
 
 
 class OwnerAuthMiddleware(BaseHTTPMiddleware):
@@ -38,6 +38,11 @@ class OwnerAuthMiddleware(BaseHTTPMiddleware):
             origin = request.headers.get('origin')
             expected = os.getenv('LIFEHUB_PUBLIC_URL', '').rstrip('/') or str(request.base_url).rstrip('/')
             if origin and origin != expected:
+                if request.url.path.startswith('/expenses/bank/'):
+                    return JSONResponse({
+                        'error': 'Open Money at your configured HTTPS address to connect or sync your bank.',
+                        'money_url': expected + '/expenses/',
+                    }, status_code=403, headers={'Cache-Control': 'no-store'})
                 return PlainTextResponse('Cross-origin requests are not allowed.', 403)
             if request.headers.get('sec-fetch-site') == 'cross-site':
                 return PlainTextResponse('Cross-site requests are not allowed.', 403)

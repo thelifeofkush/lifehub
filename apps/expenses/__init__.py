@@ -1,4 +1,5 @@
 import time
+import os
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Literal
@@ -47,7 +48,8 @@ def index(request: Request, month: str | None = None):
     spending = sum(row['cents'] for row in posted if row['kind'] == 'expense') - sum(row['cents'] for row in posted if row['kind'] == 'refund')
     return render(request, 'expenses/index.html', items=items, month=month,
                   income=income, spending=spending, net=income-spending,
-                  connections=connections, setup_problem=banking.setup_problem(), environment=banking.environment())
+                  connections=connections, setup_problem=banking.setup_problem(), environment=banking.environment(),
+                  bank_origin=os.getenv('LIFEHUB_PUBLIC_URL', '').rstrip('/'))
 
 
 @router.post('/add')

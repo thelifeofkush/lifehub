@@ -2,6 +2,16 @@
   const status = document.querySelector('#bank-status');
   let busy = false;
   const say = text => { status.textContent = text; };
+  const bankOrigin = status?.dataset.bankOrigin;
+  function correctAddress() {
+    if (!bankOrigin || window.location.origin === bankOrigin) return true;
+    say('Bank connections use your configured HTTPS address. ');
+    const link = document.createElement('a');
+    link.href = bankOrigin + '/expenses/';
+    link.textContent = 'Open secure Money →';
+    status.append(link);
+    return false;
+  }
   async function post(path, body = {}) {
     const response = await fetch('/expenses/bank/' + path, {
       method: 'POST', credentials: 'same-origin',
@@ -10,7 +20,11 @@
     });
     let result;
     try { result = await response.json(); }
-    catch { throw new Error('The server could not complete this action. Reload Money to check its status.'); }
+    catch {
+      if (response.status === 401) throw new Error('Your LifeHub sign-in is required. Reload this page and sign in again.');
+      if (response.status === 403) throw new Error('This request was blocked. Open Money at your configured HTTPS address and try again.');
+      throw new Error('The server could not complete this action. Reload Money to check its status.');
+    }
     if (!response.ok) throw new Error(result.error || (typeof result.detail === 'string' ? result.detail : 'The bank action failed.'));
     return result;
   }
@@ -27,6 +41,7 @@
     return scriptPromise;
   }
   async function connect(itemId = null, resume = false) {
+    if (!correctAddress()) return;
     if (busy) return;
     busy = true;
     say('Opening secure bank connection…');
@@ -57,6 +72,7 @@
   document.querySelector('#connect-bank')?.addEventListener('click', () => connect());
   document.querySelectorAll('[data-reconnect]').forEach(button => button.addEventListener('click', () => connect(button.dataset.reconnect)));
   async function action(path, body, message) {
+    if (!correctAddress()) return;
     if (busy) return;
     busy = true;
     say(message);
@@ -68,5 +84,7 @@
     if (confirm('Disconnect this bank and remove its imported transactions from LifeHub? Manual entries are kept.'))
       action('disconnect', {item_id: button.dataset.disconnect}, 'Disconnecting bank…');
   }));
-  if (document.querySelector('#oauth-resume')) connect(null, true);
+  if (!correctAddress()) {
+    document.querySelectorAll('#connect-bank, #sync-bank, [data-reconnect], [data-disconnect]').forEach(button => { button.disabled = true; });
+  } else if (document.querySelector('#oauth-resume')) connect(null, true);
 })();
