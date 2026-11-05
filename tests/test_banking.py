@@ -109,6 +109,38 @@ class BankTests(unittest.TestCase):
             self.assertEqual(client.post('/expenses/bank/classify',data={
                 'transaction_id':'categorized','kind':'expense','category':'<script>'}).status_code,422)
 
+    def test_transaction_card_filter_keeps_dashboard_totals(self):
+        accounts={'accounts':[
+            dict(account_id=key,name=name,type=kind,subtype=None,mask=mask,
+                 balances={'current':100,'iso_currency_code':'USD'})
+            for key,name,kind,mask in [('card-a','Card Alpha','credit','1234'),
+                                      ('card-b','Card Beta','credit','5678'),
+                                      ('cash','Checking','depository','0000')]]}
+        with patch.object(banking,'call',return_value=accounts):
+            banking.refresh_accounts('item-1')
+        transactions=[{**transaction(key),'account_id':key,'name':name}
+                      for key,name in [('card-a','Alpha purchase'),('card-b','Beta purchase'),('cash','Cash purchase')]]
+        with patch.object(banking,'call',return_value=page(transactions)):
+            banking.sync_item('item-1')
+        with patch.object(banking,'sync_all'), TestClient(app) as client:
+            client.auth=('owner','test-password')
+            single=client.get('/expenses/?transaction_card=card-a')
+            self.assertEqual(single.status_code,200)
+            self.assertIn('Alpha purchase',single.text)
+            self.assertNotIn('Beta purchase',single.text)
+            self.assertNotIn('Cash purchase',single.text)
+            self.assertIn('<h2>$30.00</h2>',single.text)
+            credit=client.get('/expenses/?transaction_card=credit').text
+            self.assertIn('Alpha purchase',credit)
+            self.assertIn('Beta purchase',credit)
+            self.assertNotIn('Cash purchase',credit)
+            self.assertIn('Cash purchase',client.get('/expenses/?transaction_card=all').text)
+            self.assertEqual(client.get('/expenses/?transaction_card=cash').status_code,422)
+            saved=client.post('/expenses/bank/classify',data={
+                'transaction_id':'card-a','kind':'expense','category':'Travel',
+                'month':today()[:7],'transaction_card':'card-a'},follow_redirects=False)
+            self.assertIn('transaction_card=card-a',saved.headers['location'])
+
     def test_failed_page_never_commits_partial_data_or_cursor(self):
         with patch.object(banking, 'call', side_effect=[page([transaction('a')], more=True), banking.BankError('CONNECTION_FAILED')]):
             with self.assertRaises(banking.BankError):

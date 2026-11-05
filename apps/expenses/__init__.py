@@ -26,7 +26,7 @@ def init_db(conn):
 
 
 @router.get('/')
-def index(request: Request, month: str | None = None, account: str = 'all'):
+def index(request: Request, month: str | None = None, account: str = 'all', transaction_card: str = 'all'):
     month = month or today()[:7]
     try:
         parsed = date.fromisoformat(month + '-01')
@@ -62,7 +62,16 @@ def index(request: Request, month: str | None = None, account: str = 'all'):
                'category_label': row['override_category'] or category_for(row['category'], row['description'])} for row in imported]
     items.sort(key=lambda row: (row['day'], row['key']), reverse=True)
     report = analytics(items, month, accounts, snapshots, account)
+    credit_cards = [entry for entry in accounts if entry['type'] == 'credit']
+    card_ids = {entry['account_id'] for entry in credit_cards}
+    if transaction_card not in ('all', 'credit') and transaction_card not in card_ids:
+        raise HTTPException(422, 'Choose an available credit card.')
+    if transaction_card == 'credit':
+        report['items'] = [row for row in report['items'] if row['account_id'] in card_ids]
+    elif transaction_card != 'all':
+        report['items'] = [row for row in report['items'] if row['account_id'] == transaction_card]
     return render(request, 'expenses/index.html', **report, month=month,
+                  credit_cards=credit_cards, transaction_card=transaction_card,
                   month_label=parsed.strftime('%B %Y'), accounts=accounts, selected_account=account, categories=CATEGORIES,
                   connections=connections, setup_problem=banking.setup_problem(), environment=banking.environment(),
                   bank_origin=os.getenv('LIFEHUB_PUBLIC_URL', '').rstrip('/'))
@@ -191,7 +200,8 @@ def disconnect(request: Request, body: LinkRequest):
 @router.post('/bank/classify')
 def classify(transaction_id: str = Form(max_length=200),
              kind: Literal['expense', 'income', 'transfer', 'refund'] = Form(),
-             category: str = Form(''), month: str = Form(''), account: str = Form('all')):
+             category: str = Form(''), month: str = Form(''), account: str = Form('all'),
+             transaction_card: str = Form('all')):
     if category and category not in CATEGORIES and category != 'auto':
         raise HTTPException(422, 'Choose a valid category.')
     with db() as conn:
@@ -201,5 +211,5 @@ def classify(transaction_id: str = Form(max_length=200),
                          (None if category == 'auto' else category, transaction_id))
     if month:
         from urllib.parse import urlencode
-        return redirect('/expenses/?' + urlencode({'month': month, 'account': account}))
+        return redirect('/expenses/?' + urlencode({'month': month, 'account': account, 'transaction_card': transaction_card}) + '#transactions')
     return redirect('/expenses/')
