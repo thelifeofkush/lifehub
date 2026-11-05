@@ -3,9 +3,9 @@
 A self-hosted home for small "life tracking" apps. One Docker container serves a
 dashboard; every folder you drop into `apps/` becomes a new tracker automatically.
 
-- **Stack:** Python · FastAPI · Jinja2 · SQLite (no JS build step, no external services)
+- **Stack:** Python · FastAPI · Jinja2 · SQLite (no JS build step; optional Plaid bank sync)
 - **Data:** one SQLite file at `./data/lifehub.db` (mounted volume — back it up)
-- **Included apps:** Habits, Journal, Expenses, and a Duncan planner launcher
+- **Included apps:** Habits, Journal, Money (income and expenses), and a Duncan planner launcher
 
 ## Run it
 
@@ -22,11 +22,22 @@ change the mapping to `"8000:8000"` to allow your LAN to connect.
 Duncan opens your existing hosted planner in a new tab. It does not sync or
 migrate planner data into the local database. The other three apps store data locally.
 
-> **Security:** there is no login. Keep it on your own machine/network. To make it
+> **Security:** set `LIFEHUB_USERNAME` and `LIFEHUB_PASSWORD` to enable the
+> single-owner login. Login is required when bank sync is configured or bank
+> connections exist. Keep it on your own machine/network. To make it
 > reachable only from the computer it runs on, keep the default port mapping in
 > `docker-compose.yml` as `"127.0.0.1:8000:8000"`. If you expose it beyond your LAN,
 > put it behind a reverse proxy with authentication (e.g. Caddy/Traefik + basic auth,
 > Tailscale, or Cloudflare Access).
+
+## Automatic bank sync and income
+
+The **Money** app supports monthly income, spending after refunds, transfers,
+and optional Plaid automatic sync. Existing expense entries are preserved.
+Follow the [Bank of America setup guide](docs/bank-sync.md) to create a Plaid
+account, configure server secrets, test Sandbox, and enable Production.
+Real Bank of America connections require Plaid full Production approval and
+OAuth registration; installing LifeHub alone does not enable bank access.
 
 ## Add a new app
 

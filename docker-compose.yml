@@ -10,6 +10,14 @@ services:
     environment:
       TZ: America/Chicago   # affects what "today" means in apps
       DATA_DIR: /data
+      LIFEHUB_USERNAME: ${LIFEHUB_USERNAME:-}
+      LIFEHUB_PASSWORD: ${LIFEHUB_PASSWORD:-}
+      LIFEHUB_PUBLIC_URL: ${LIFEHUB_PUBLIC_URL:-http://localhost:8000}
+      LIFEHUB_ENCRYPTION_KEY: ${LIFEHUB_ENCRYPTION_KEY:-}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      PLAID_SYNC_INTERVAL_SECONDS: ${PLAID_SYNC_INTERVAL_SECONDS:-3600}
     volumes:
       - ./data:/data        # your database lives here — back this folder up
       # Dev mode: uncomment these two lines and the command below to hot-reload
