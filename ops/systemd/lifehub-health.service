@@ -1,0 +1,7 @@
+[Unit]
+Description=Check LifeHub health and restart if needed
+After=lifehub.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/lifehub/ops/healthcheck.sh

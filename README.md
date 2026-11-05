@@ -45,6 +45,11 @@ required for this setup. See the guide for eligibility and connection limits.
 
 ## Add a new app
 
+For an always-on cloud server and private iPhone access, see the
+[Oracle + Tailscale deployment guide](ops/CLOUD.md). It includes encrypted backup
+tools, boot startup, and health checks. These must be installed on the cloud VM;
+adding the files to this repository does not migrate your running application.
+
 ```bash
 cp -r apps/_template apps/sleep
 mv apps/sleep/templates/_template apps/sleep/templates/sleep

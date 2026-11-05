@@ -1,0 +1,8 @@
+[Unit]
+Description=Create encrypted LifeHub backup
+After=lifehub.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/bin/bash /opt/lifehub/ops/backup.sh
