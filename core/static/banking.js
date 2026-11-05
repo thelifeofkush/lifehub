@@ -81,7 +81,7 @@
   }
   document.querySelector('#sync-bank')?.addEventListener('click', () => action('sync', {}, 'Importing available bank updates…'));
   document.querySelectorAll('[data-disconnect]').forEach(button => button.addEventListener('click', () => {
-    if (confirm('Disconnect this bank and remove its imported transactions from LifeHub? Manual entries are kept.'))
+    if (confirm('Disconnect this bank and remove its imported transactions and recorded balance history from LifeHub? Manual entries are kept.'))
       action('disconnect', {item_id: button.dataset.disconnect}, 'Disconnecting bank…');
   }));
   if (!correctAddress()) {

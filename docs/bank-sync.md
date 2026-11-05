@@ -89,6 +89,28 @@ their test records. Manual records appear in either mode.
 
 ## Sync behavior and totals
 
+- Money includes monthly category doughnut charts, six months of purchase totals,
+  account filters, and a separate category chart for each connected credit card.
+  Charts show posted USD **purchases before refunds**; the net spending metric
+  subtracts refunds. Transfers and credit-card payments marked as transfers are
+  excluded. Bank category codes are mapped to readable purchase categories.
+  Missing categories use a small set of conservative local merchant rules,
+  otherwise Other. Per-transaction category overrides survive future syncs.
+- Each sync also reads `/accounts/get` for account names, masks, types, and
+  bank-reported current balances. No additional bank login or paid Balance
+  refresh endpoint is required. A failed account read preserves prior metadata
+  and snapshots and displays an account-details error.
+- Dated balances are stored permanently in `expenses_balance_snapshots`, one
+  record per account per local calendar day. Later syncs update today's record;
+  earlier dates remain unchanged. History survives container restarts and is
+  included in the SQLite backup. Charts show up to the last 180 recorded days
+  through the selected month. Missing days are not filled with invented data.
+- Balance history begins with the first successful account snapshot. Plaid's
+  current-account response does not supply prior daily balances. The app does
+  not reconstruct them from potentially incomplete transaction history. The
+  all-accounts balance chart sums checking/savings cash; select a credit card to
+  see its debt balance instead. Account coverage changes are flagged.
+
 - The first request asks for up to 90 days of history. Actual availability
   depends on Plaid and the institution; history can arrive asynchronously.
 - Background sync runs at startup and hourly while the container is running.
@@ -111,7 +133,7 @@ their test records. Manual records appear in either mode.
 - Failure preserves previous records and the last successful sync timestamp.
   Use **Reconnect** if your bank needs renewed authorization.
 - **Disconnect** revokes the Plaid Item and deletes its local connection and
-  imported transactions. Manual records are retained. If access to Plaid fails,
+  imported transactions, account metadata, and recorded balances. Manual records are retained. If access to Plaid fails,
   records are retained so you can retry. You can also manage permissions at
   your bank and through Plaid's consumer portal.
 

@@ -11,6 +11,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
 from core.db import db
+from core.web import today
 
 LOCK = threading.Lock()
 
@@ -83,6 +84,55 @@ def init_bank_db(conn):
         day TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
         cents INTEGER NOT NULL, currency TEXT NOT NULL, pending INTEGER NOT NULL,
         kind TEXT NOT NULL, override_kind TEXT)''')
+    columns = {row['name'] for row in conn.execute('PRAGMA table_info(expenses_bank_transactions)')}
+    if 'override_category' not in columns:
+        conn.execute('ALTER TABLE expenses_bank_transactions ADD COLUMN override_category TEXT')
+    item_columns = {row['name'] for row in conn.execute('PRAGMA table_info(expenses_bank_items)')}
+    if 'accounts_error' not in item_columns:
+        conn.execute('ALTER TABLE expenses_bank_items ADD COLUMN accounts_error TEXT')
+    conn.execute('''CREATE TABLE IF NOT EXISTS expenses_bank_accounts (
+        account_id TEXT PRIMARY KEY, item_id TEXT NOT NULL, name TEXT NOT NULL,
+        mask TEXT, type TEXT, subtype TEXT, currency TEXT NOT NULL,
+        balance_cents INTEGER, updated_at TEXT NOT NULL)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS expenses_balance_snapshots (
+        account_id TEXT NOT NULL, day TEXT NOT NULL, balance_cents INTEGER NOT NULL,
+        currency TEXT NOT NULL, observed_at TEXT NOT NULL, PRIMARY KEY(account_id, day))''')
+
+
+def refresh_accounts(item_id):
+    """Read existing account metadata and record reported balances; no new Item."""
+    with LOCK:
+        with db() as conn:
+            item = conn.execute('SELECT * FROM expenses_bank_items WHERE item_id=? AND environment=?',
+                                (item_id, environment())).fetchone()
+        if not item:
+            raise BankError('ITEM_NOT_FOUND')
+        try:
+            result = call('/accounts/get', access_token=access_token(item))
+            timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
+            with db() as conn:
+                for account in result['accounts']:
+                    balances = account.get('balances') or {}
+                    current = balances.get('current')
+                    cents = None if current is None else int((Decimal(str(current)) * 100).quantize(Decimal('1')))
+                    currency = balances.get('iso_currency_code') or balances.get('unofficial_currency_code') or 'Unknown'
+                    conn.execute('''INSERT INTO expenses_bank_accounts
+                        (account_id,item_id,name,mask,type,subtype,currency,balance_cents,updated_at)
+                        VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET
+                        name=excluded.name,mask=excluded.mask,type=excluded.type,subtype=excluded.subtype,
+                        currency=excluded.currency,balance_cents=excluded.balance_cents,updated_at=excluded.updated_at''',
+                        (account['account_id'],item_id,account.get('official_name') or account.get('name') or 'Bank account',
+                         account.get('mask'),account.get('type'),account.get('subtype'),currency,cents,timestamp))
+                    if cents is not None:
+                        conn.execute('''INSERT INTO expenses_balance_snapshots VALUES (?,?,?,?,?)
+                            ON CONFLICT(account_id,day) DO UPDATE SET balance_cents=excluded.balance_cents,
+                            currency=excluded.currency,observed_at=excluded.observed_at''',
+                            (account['account_id'],today(),cents,currency,timestamp))
+                conn.execute('UPDATE expenses_bank_items SET accounts_error=NULL WHERE item_id=?', (item_id,))
+        except BankError as exc:
+            with db() as conn:
+                conn.execute('UPDATE expenses_bank_items SET accounts_error=? WHERE item_id=?', (exc.code,item_id))
+            raise
 
 
 def access_token(item):
@@ -207,6 +257,10 @@ def sync_all():
             sync_item(item['item_id'])
         except BankError:
             pass  # Safe error code persisted for the dashboard; retry next cycle.
+        try:
+            refresh_accounts(item['item_id'])
+        except BankError:
+            pass
 
 
 async def background_sync():
@@ -233,5 +287,7 @@ def disconnect(item_id):
             raise BankError('ITEM_NOT_FOUND')
         call('/item/remove', access_token=access_token(item))
         with db() as conn:
+            conn.execute('DELETE FROM expenses_balance_snapshots WHERE account_id IN (SELECT account_id FROM expenses_bank_accounts WHERE item_id=?)', (item_id,))
+            conn.execute('DELETE FROM expenses_bank_accounts WHERE item_id=?', (item_id,))
             conn.execute('DELETE FROM expenses_bank_transactions WHERE item_id=?', (item_id,))
             conn.execute('DELETE FROM expenses_bank_items WHERE item_id=?', (item_id,))

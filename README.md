@@ -33,7 +33,10 @@ migrate planner data into the local database. The other three apps store data lo
 ## Automatic bank sync and income
 
 The **Money** app supports monthly income, spending after refunds, transfers,
-and optional Plaid automatic sync. Existing expense entries are preserved.
+and optional Plaid automatic sync. It includes category doughnut charts, monthly
+purchase comparisons, per-credit-card breakdowns, and daily saved balance history.
+Categories are automatic with editable overrides. Balance history begins when
+the first snapshot is saved and survives restarts. Existing expense entries are preserved.
 Follow the [Bank of America setup guide](docs/bank-sync.md) to create a Plaid
 Trial account, configure server secrets, test Sandbox, and connect your real bank.
 Plaid's free Trial supports Bank of America and Transactions with up to 10

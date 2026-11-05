@@ -60,6 +60,7 @@ class BankTests(unittest.TestCase):
         self.assertEqual(len(self.stored()), 2)
         with db() as conn:
             conn.execute("UPDATE expenses_bank_transactions SET override_kind='transfer' WHERE transaction_id='a'")
+            conn.execute("UPDATE expenses_bank_transactions SET override_category='Shopping' WHERE transaction_id='a'")
         with patch.object(banking, 'call', return_value=page([first], modified=[{**first, 'amount': 15}], removed=['b'])):
             banking.sync_item('item-1')
             banking.sync_item('item-1')
@@ -67,6 +68,46 @@ class BankTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['cents'], 1500)
         self.assertEqual(rows[0]['override_kind'], 'transfer')
+        self.assertEqual(rows[0]['override_category'], 'Shopping')
+
+    def test_account_refresh_keeps_daily_balance_history(self):
+        def accounts(balance):
+            return {'accounts':[dict(account_id='account-1', name='Everyday Card',official_name=None,
+                mask='1234',type='credit',subtype='credit card',
+                balances={'current':balance,'iso_currency_code':'USD'})]}
+        with patch.object(banking,'call',return_value=accounts(10.25)), patch.object(banking,'today',return_value='2026-11-04'):
+            banking.refresh_accounts('item-1')
+        with patch.object(banking,'call',return_value=accounts(20.50)), patch.object(banking,'today',return_value='2026-11-05'):
+            banking.refresh_accounts('item-1')
+            banking.refresh_accounts('item-1')
+        with db() as conn:
+            snapshots=conn.execute('SELECT * FROM expenses_balance_snapshots ORDER BY day').fetchall()
+            account=conn.execute('SELECT * FROM expenses_bank_accounts').fetchone()
+        self.assertEqual([s['balance_cents'] for s in snapshots],[1025,2050])
+        self.assertEqual(account['name'],'Everyday Card')
+        self.assertEqual(account['mask'],'1234')
+        with patch.object(banking,'call',side_effect=banking.BankError('CONNECTION_FAILED')):
+            with self.assertRaises(banking.BankError):
+                banking.refresh_accounts('item-1')
+        with db() as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM expenses_balance_snapshots').fetchone()[0],2)
+            self.assertEqual(conn.execute('SELECT accounts_error FROM expenses_bank_items').fetchone()[0],'CONNECTION_FAILED')
+
+    def test_category_override_filter_and_rendered_charts(self):
+        with patch.object(banking,'call',return_value=page([transaction('categorized')])):
+            banking.sync_item('item-1')
+        with patch.object(banking,'sync_all'), TestClient(app) as client:
+            client.auth=('owner','test-password')
+            response=client.post('/expenses/bank/classify',data={
+                'transaction_id':'categorized','kind':'expense','category':'Travel',
+                'month':today()[:7],'account':'account-1'})
+            self.assertEqual(response.status_code,200)
+            self.assertIn('Purchase categories',response.text)
+            self.assertIn('Travel: $10.00',response.text)
+            self.assertIn('Daily reported balances',response.text)
+            self.assertEqual(client.get('/expenses/?account=missing').status_code,422)
+            self.assertEqual(client.post('/expenses/bank/classify',data={
+                'transaction_id':'categorized','kind':'expense','category':'<script>'}).status_code,422)
 
     def test_failed_page_never_commits_partial_data_or_cursor(self):
         with patch.object(banking, 'call', side_effect=[page([transaction('a')], more=True), banking.BankError('CONNECTION_FAILED')]):

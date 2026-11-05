@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from core.db import db
 from core.web import render, redirect, today
 from . import banking
+from .analytics import analytics, category_for, CATEGORIES
 
 manifest = dict(name='Money', icon='💳', description='Track income, spending, and connected bank activity.')
 router = APIRouter()
@@ -25,7 +26,7 @@ def init_db(conn):
 
 
 @router.get('/')
-def index(request: Request, month: str | None = None):
+def index(request: Request, month: str | None = None, account: str = 'all'):
     month = month or today()[:7]
     try:
         parsed = date.fromisoformat(month + '-01')
@@ -34,20 +35,35 @@ def index(request: Request, month: str | None = None):
     except ValueError:
         raise HTTPException(422, 'Select a valid month (YYYY-MM).')
     with db() as conn:
-        manual = conn.execute('SELECT * FROM expenses_items WHERE substr(day, 1, 7)=?', (month,)).fetchall()
+        manual = conn.execute('SELECT * FROM expenses_items').fetchall()
         imported = conn.execute('''SELECT t.* FROM expenses_bank_transactions t
             JOIN expenses_bank_items b ON b.item_id=t.item_id
-            WHERE substr(t.day, 1, 7)=? AND b.environment=?''', (month, banking.environment())).fetchall()
-        connections = conn.execute('SELECT item_id, environment, last_sync, error FROM expenses_bank_items WHERE environment=?', (banking.environment(),)).fetchall()
-    items = [{**dict(row), 'source': 'Manual', 'pending': False, 'currency': 'USD', 'key': str(row['id'])} for row in manual]
+            WHERE b.environment=?''', (banking.environment(),)).fetchall()
+        connections = conn.execute('SELECT item_id, environment, last_sync, error, accounts_error FROM expenses_bank_items WHERE environment=?', (banking.environment(),)).fetchall()
+        accounts = [dict(row) for row in conn.execute('''SELECT a.* FROM expenses_bank_accounts a
+            JOIN expenses_bank_items b ON b.item_id=a.item_id WHERE b.environment=? ORDER BY a.type,a.name,a.account_id''', (banking.environment(),))]
+        snapshots = conn.execute('''SELECT s.* FROM expenses_balance_snapshots s
+            JOIN expenses_bank_accounts a ON a.account_id=s.account_id JOIN expenses_bank_items b ON b.item_id=a.item_id
+            WHERE b.environment=? ORDER BY s.day''', (banking.environment(),)).fetchall()
+    for entry in accounts:
+        entry['label'] = entry['name'] + (f" ••{entry['mask']}" if entry['mask'] else '')
+    known = {entry['account_id']: entry for entry in accounts}
+    for row in imported:
+        if row['account_id'] not in known:
+            entry = dict(account_id=row['account_id'], label=f'Unlabeled account {len(known)+1}', type='unknown', balance_cents=None, currency='USD')
+            accounts.append(entry)
+            known[row['account_id']] = entry
+    if account not in ('all', 'manual') and account not in known:
+        raise HTTPException(422, 'Choose an available account.')
+    items = [{**dict(row), 'source': 'Manual', 'pending': False, 'currency': 'USD', 'key': str(row['id']),
+              'account_id': 'manual', 'account_label': 'Manual entry', 'category_label': category_for(row['category'], row['description'])} for row in manual]
     items += [{**dict(row), 'source': 'Bank', 'kind': row['override_kind'] or row['kind'],
-               'cents': abs(row['cents']), 'key': row['transaction_id']} for row in imported]
+               'cents': abs(row['cents']), 'key': row['transaction_id'], 'account_label': known[row['account_id']]['label'],
+               'category_label': row['override_category'] or category_for(row['category'], row['description'])} for row in imported]
     items.sort(key=lambda row: (row['day'], row['key']), reverse=True)
-    posted = [row for row in items if not row['pending'] and row['currency'] == 'USD']
-    income = sum(row['cents'] for row in posted if row['kind'] == 'income')
-    spending = sum(row['cents'] for row in posted if row['kind'] == 'expense') - sum(row['cents'] for row in posted if row['kind'] == 'refund')
-    return render(request, 'expenses/index.html', items=items, month=month,
-                  income=income, spending=spending, net=income-spending,
+    report = analytics(items, month, accounts, snapshots, account)
+    return render(request, 'expenses/index.html', **report, month=month,
+                  month_label=parsed.strftime('%B %Y'), accounts=accounts, selected_account=account, categories=CATEGORIES,
                   connections=connections, setup_problem=banking.setup_problem(), environment=banking.environment(),
                   bank_origin=os.getenv('LIFEHUB_PUBLIC_URL', '').rstrip('/'))
 
@@ -154,7 +170,7 @@ def sync(request: Request):
     bank_request(request)
     banking.sync_all()
     with db() as conn:
-        failed = conn.execute('SELECT 1 FROM expenses_bank_items WHERE environment=? AND error IS NOT NULL', (banking.environment(),)).fetchone()
+        failed = conn.execute('SELECT 1 FROM expenses_bank_items WHERE environment=? AND (error IS NOT NULL OR accounts_error IS NOT NULL)', (banking.environment(),)).fetchone()
     if failed:
         return JSONResponse({'error': 'Some accounts could not sync. Reload Money to see their connection status. Existing records are retained.'}, 502)
     return {'status': 'synced'}
@@ -174,7 +190,16 @@ def disconnect(request: Request, body: LinkRequest):
 
 @router.post('/bank/classify')
 def classify(transaction_id: str = Form(max_length=200),
-             kind: Literal['expense', 'income', 'transfer', 'refund'] = Form()):
+             kind: Literal['expense', 'income', 'transfer', 'refund'] = Form(),
+             category: str = Form(''), month: str = Form(''), account: str = Form('all')):
+    if category and category not in CATEGORIES and category != 'auto':
+        raise HTTPException(422, 'Choose a valid category.')
     with db() as conn:
         conn.execute('UPDATE expenses_bank_transactions SET override_kind=? WHERE transaction_id=?', (kind, transaction_id))
+        if category:
+            conn.execute('UPDATE expenses_bank_transactions SET override_category=? WHERE transaction_id=?',
+                         (None if category == 'auto' else category, transaction_id))
+    if month:
+        from urllib.parse import urlencode
+        return redirect('/expenses/?' + urlencode({'month': month, 'account': account}))
     return redirect('/expenses/')
