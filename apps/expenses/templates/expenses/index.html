@@ -9,6 +9,7 @@
 </section>
 <p class="muted">USD · Posted transactions only. Transfers and credit-card payments marked as transfers are excluded. Review imported types for accuracy. Avoid manually entering transactions that will also be imported.</p>
 <section class="panel"><h2>Connected banks</h2>
+<p class="muted">Personal setup: <a href="https://support.plaid.com/hc/en-us/articles/39994173227159-What-is-the-Plaid-Trial-plan" target="_blank" rel="noopener noreferrer">Plaid's free Trial</a> supports Bank of America. Use Reconnect for an existing bank; linking it again uses another connection slot.</p>
 {% if environment == 'sandbox' %}<p class="notice">Sandbox mode: connections and imported bank transactions are test data, not your real bank account.</p>{% endif %}
 {% if setup_problem %}<p>{{ setup_problem }}</p><p class="muted">Follow <code>docs/bank-sync.md</code> in the repository to configure automatic sync.</p>{% else %}<button type="button" id="connect-bank">Connect bank</button> <button type="button" id="sync-bank">Sync now</button><p class="muted">Sync runs automatically while the server is running. It imports updates available from Plaid; this is not a live bank feed.</p>{% endif %}
 <p id="bank-status" role="status" aria-live="polite"></p>

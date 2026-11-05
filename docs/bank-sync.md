@@ -4,20 +4,27 @@ LifeHub uses Plaid Transactions to import account activity. It never asks for
 your bank password itself and does not request payment initiation. Your bank
 authorization happens in Plaid Link and, for Bank of America, its OAuth flow.
 
-## 1. Create your Plaid account
+## 1. Create a free Plaid Trial account
 
-1. Sign up at [Plaid Dashboard](https://dashboard.plaid.com/signup).
+1. Sign up at [Plaid Dashboard](https://dashboard.plaid.com/signup) and choose
+   the **free Trial plan**. This is available to US/Canadian developers who do
+   not already have a Production or Limited Production account. Complete the
+   identity checks and review/accept Plaid's agreements yourself.
 2. Start with Sandbox and select the **Transactions** product. Sandbox contains
    fake data; it cannot import your Bank of America account.
-3. For a real Bank of America connection, request **full Production access** and
-   complete Plaid's OAuth registration, including the Bank of America requirements
-   shown in your Dashboard. Limited Production excludes Bank of America.
-   Approval, institution access, and commercial terms are controlled by Plaid;
-   this repository cannot grant them. Review pricing before activating production.
+3. Use Trial for your real Bank of America connection. Trial includes Transactions
+   and Bank of America OAuth access without separate paid-Production OAuth
+   registration. The older Limited Production restrictions do not describe Trial.
+4. Stay on Trial rather than upgrading to a paid Production plan for this personal
+   project. Trial uses the **production API environment**, so LifeHub needs
+   `PLAID_ENV=production` and your Trial account's Production API secret.
 
-References: [OAuth prerequisites](https://plaid.com/docs/link/oauth/),
-[Limited Production restrictions](https://plaid.com/docs/quickstart/glossary/),
-[billing](https://plaid.com/docs/account/billing/).
+Trial permits up to **10 Items** (bank-login connections), with uncapped API calls
+to those connections. Re-linking the same login consumes additional slots, and
+disconnecting does not restore slots. Use **Reconnect** for existing connections.
+These are the current provider terms, not a promise of permanent free service.
+
+Source: [Plaid Trial eligibility, limits, and OAuth coverage](https://support.plaid.com/hc/en-us/articles/39994173227159-What-is-the-Plaid-Trial-plan).
 
 ## 2. Configure LifeHub on your server
 
@@ -61,7 +68,7 @@ For local Python development, load the same configuration with
 `uvicorn core.main:app --reload --env-file .env`. Use a single server process;
 sync coordination is process-local, and this is a single-owner application.
 
-## 3. Enable your real account after approval
+## 3. Connect your real account on the free Trial plan
 
 1. Put LifeHub behind an HTTPS reverse proxy on a domain you control, with the
    login configured. Keep Docker's default localhost port binding and run the
@@ -69,8 +76,9 @@ sync coordination is process-local, and this is a single-owner application.
    and scheme; only trust forwarded headers from your proxy.
 2. Set `LIFEHUB_PUBLIC_URL=https://your-domain.example` and allowlist
    `https://your-domain.example/expenses/oauth` in Plaid Dashboard.
-3. After Plaid approves full Production/OAuth access, change `PLAID_ENV` to
-   `production` and use the **Production** secret. Keep the same encryption key.
+3. Once your Trial account is enabled, change `PLAID_ENV` to `production` and use
+   its **Production** secret. This environment setting does not upgrade your
+   billing plan. Keep the same encryption key.
 4. Recreate the container with `docker compose up -d --build` and open LifeHub
    using that HTTPS address. Choose **Money → Connect bank → Bank of America**,
    authorize at the bank, and choose the accounts to share.
@@ -86,7 +94,8 @@ their test records. Manual records appear in either mode.
 - Background sync runs at startup and hourly while the container is running.
   `PLAID_SYNC_INTERVAL_SECONDS` can change this (minimum 300 seconds). **Sync now**
   imports the latest data already available at Plaid; it does not force the bank
-  to refresh. Polling may incur usage charges under your Plaid plan.
+  to refresh. Trial allows uncapped calls on its connected Items; if you later
+  upgrade, review the paid plan's billing terms before continuing sync.
 - No public webhook receiver is needed. Sync uses `/transactions/sync` cursors,
   handles additions/modifications/removals, and commits complete paginated
   updates atomically. Repeated syncs do not duplicate the same transaction ID.

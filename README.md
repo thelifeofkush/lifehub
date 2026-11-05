@@ -35,9 +35,10 @@ migrate planner data into the local database. The other three apps store data lo
 The **Money** app supports monthly income, spending after refunds, transfers,
 and optional Plaid automatic sync. Existing expense entries are preserved.
 Follow the [Bank of America setup guide](docs/bank-sync.md) to create a Plaid
-account, configure server secrets, test Sandbox, and enable Production.
-Real Bank of America connections require Plaid full Production approval and
-OAuth registration; installing LifeHub alone does not enable bank access.
+Trial account, configure server secrets, test Sandbox, and connect your real bank.
+Plaid's free Trial supports Bank of America and Transactions with up to 10
+bank-login connections. It uses `PLAID_ENV=production`; a paid plan is not
+required for this setup. See the guide for eligibility and connection limits.
 
 ## Add a new app
 
